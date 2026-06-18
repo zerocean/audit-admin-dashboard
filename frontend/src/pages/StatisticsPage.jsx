@@ -113,11 +113,15 @@ function StatTable({ data, nameKey }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
       <thead><tr style={{ textAlign: 'left', borderBottom: '2px solid #f0f0f0' }}>
-        <th style={{ padding: 8 }}>名称</th><th>任务数</th><th>Token</th><th>费用</th></tr></thead>
+        <th style={{ padding: 8 }}>名称</th><th>任务数</th><th>输入 TOKEN</th><th>输出 TOKEN</th><th>总 TOKEN</th><th>费用</th></tr></thead>
       <tbody>{data.map((d, i) => (
         <tr key={i} style={{ borderBottom: '1px solid #f8f8f8' }}>
           <td style={{ padding: 8 }}>{d[nameKey] === 'audit-report-review' ? '审计复核' : d[nameKey] === 'TaxFill_HK' ? 'TaxFill' : d[nameKey]}</td>
-          <td>{d.task_count}</td><td style={{ fontFamily: 'monospace' }}>{Number(d.total_tokens).toLocaleString()}</td><td>¥{Number(d.total_cost).toFixed(2)}</td>
+          <td>{d.task_count}</td>
+          <td style={{ fontFamily: 'monospace' }}>{Number(d.input_tokens || 0).toLocaleString()}</td>
+          <td style={{ fontFamily: 'monospace' }}>{Number(d.output_tokens || 0).toLocaleString()}</td>
+          <td style={{ fontFamily: 'monospace' }}>{Number(d.total_tokens).toLocaleString()}</td>
+          <td>¥{Number(d.total_cost).toFixed(2)}</td>
         </tr>
       ))}</tbody>
     </table>
@@ -129,7 +133,7 @@ function ModelTable({ data }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
       <thead><tr style={{ textAlign: 'left', borderBottom: '2px solid #f0f0f0' }}>
-        <th style={{ padding: 8 }}>模型</th><th style={{ padding: 8 }}>供应商</th><th>Token</th><th>费用</th><th>占比</th></tr></thead>
+        <th style={{ padding: 8 }}>模型</th><th style={{ padding: 8 }}>供应商</th><th>输入 TOKEN</th><th>输出 TOKEN</th><th>总 TOKEN</th><th>费用</th><th>占比</th></tr></thead>
       <tbody>
         {(() => {
           const totalCost = data.reduce((s, d) => s + Number(d.total_cost || 0), 0)
@@ -137,6 +141,8 @@ function ModelTable({ data }) {
             <tr key={i} style={{ borderBottom: '1px solid #f8f8f8' }}>
               <td style={{ padding: 8, fontWeight: 500 }}>{d.model_name}</td>
               <td style={{ padding: 8, color: '#888' }}>{d.provider}</td>
+              <td style={{ fontFamily: 'monospace' }}>{Number(d.input_tokens || 0).toLocaleString()}</td>
+              <td style={{ fontFamily: 'monospace' }}>{Number(d.output_tokens || 0).toLocaleString()}</td>
               <td style={{ fontFamily: 'monospace' }}>{Number(d.total_tokens).toLocaleString()}</td>
               <td>¥{Number(d.total_cost).toFixed(2)}</td>
               <td>

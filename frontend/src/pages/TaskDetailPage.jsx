@@ -49,6 +49,9 @@ export default function TaskDetailPage() {
   }
   const hasAuditReport = !!(auditText || auditTable)
 
+  const isEmail = task.source === 'email'
+  const displayUser = isEmail ? 'Email触发' : (task.user_name || `用户 #${task.user_id}`)
+
   return (
     <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
       <button onClick={() => navigate('/tasks')}
@@ -61,6 +64,8 @@ export default function TaskDetailPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24, fontSize: 13 }}>
         <MetaRow label="文件名" value={inputs.map(f => f.file_name).join(', ') || task.input_filename} />
         <MetaRow label="状态" value={<StatusBadge status={task.status} />} />
+        <MetaRow label="执行者" value={displayUser} />
+        <MetaRow label="来源" value={isEmail ? '📧 邮件' : task.source === 'frontend' ? '🖥 前端' : task.source} />
         <MetaRow label="Token" value={Number(task.total_tokens).toLocaleString()} />
         <MetaRow label="费用" value={`¥${Number(task.total_cost).toFixed(4)}`} />
         <MetaRow label="创建时间" value={task.created_at || '-'} />

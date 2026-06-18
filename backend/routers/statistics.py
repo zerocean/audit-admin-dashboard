@@ -70,6 +70,8 @@ def overview(
     by_provider_q = db.query(
         TaskStep.model_provider,
         func.count(TaskStep.id),
+        func.sum(TaskStep.input_tokens),
+        func.sum(TaskStep.output_tokens),
         func.sum(TaskStep.total_tokens),
         func.sum(TaskStep.total_cost),
     )
@@ -77,7 +79,9 @@ def overview(
         by_provider_q = by_provider_q.filter(TaskStep.task_id.in_(task_ids))
     by_provider_q = by_provider_q.group_by(TaskStep.model_provider)
     by_provider = [
-        {"provider": r[0], "task_count": r[1], "total_tokens": r[2] or 0, "total_cost": float(r[3] or 0)}
+        {"provider": r[0], "task_count": r[1],
+         "input_tokens": r[2] or 0, "output_tokens": r[3] or 0,
+         "total_tokens": r[4] or 0, "total_cost": float(r[5] or 0)}
         for r in by_provider_q.all() if r[0]
     ]
 
@@ -85,6 +89,8 @@ def overview(
     by_model_q = db.query(
         TaskStep.model_name,
         TaskStep.model_provider,
+        func.sum(TaskStep.input_tokens),
+        func.sum(TaskStep.output_tokens),
         func.sum(TaskStep.total_tokens),
         func.sum(TaskStep.total_cost),
     )
@@ -92,7 +98,9 @@ def overview(
         by_model_q = by_model_q.filter(TaskStep.task_id.in_(task_ids))
     by_model_q = by_model_q.group_by(TaskStep.model_name, TaskStep.model_provider)
     by_model = [
-        {"model_name": r[0], "provider": r[1], "total_tokens": r[2] or 0, "total_cost": float(r[3] or 0)}
+        {"model_name": r[0], "provider": r[1],
+         "input_tokens": r[2] or 0, "output_tokens": r[3] or 0,
+         "total_tokens": r[4] or 0, "total_cost": float(r[5] or 0)}
         for r in by_model_q.all() if r[0]
     ]
 
@@ -189,6 +197,8 @@ def by_provider(
     q = db.query(
         TaskStep.model_provider,
         func.count(TaskStep.id),
+        func.sum(TaskStep.input_tokens),
+        func.sum(TaskStep.output_tokens),
         func.sum(TaskStep.total_tokens),
         func.sum(TaskStep.total_cost),
     )
@@ -203,7 +213,9 @@ def by_provider(
     return {
         "success": True,
         "data": [
-            {"name": r[0], "task_count": r[1], "total_tokens": r[2] or 0, "total_cost": float(r[3] or 0)}
+            {"name": r[0], "task_count": r[1],
+             "input_tokens": r[2] or 0, "output_tokens": r[3] or 0,
+             "total_tokens": r[4] or 0, "total_cost": float(r[5] or 0)}
             for r in rows if r[0]
         ],
     }
@@ -212,20 +224,45 @@ def by_provider(
 @router.get("/by-user")
 def by_user(start_date: str = Query(None), end_date: str = Query(None),
             db: Session = Depends(get_db), _= Depends(get_current_user)):
-    """按用户统计"""
+    """按用户统计 (email 触发统一归为 Email触发)"""
     from shared_db.models import User
+
+    # CASE: tasks with source='email' → group as 'Email触发'
+    user_label = case(
+        (Task.source == "email", "Email触发"),
+        else_=User.username
+    )
+
     q = db.query(
-        User.username, func.count(Task.id), func.sum(Task.total_tokens), func.sum(Task.total_cost)
-    ).join(Task, Task.user_id == User.id).filter(Task.source != "development")
+        user_label, func.count(Task.id),
+        func.sum(Task.total_tokens), func.sum(Task.total_cost)
+    ).join(User, Task.user_id == User.id).filter(Task.source != "development")
     if start_date:
         q = q.filter(func.date(Task.created_at) >= start_date[:10])
     if end_date:
         q = q.filter(func.date(Task.created_at) <= end_date[:10])
-    rows = q.group_by(User.username).all()
+    rows = q.group_by(user_label).all()
+
+    # For input/output tokens of by_user, we need from TaskSteps
+    step_q = db.query(
+        user_label,
+        func.sum(TaskStep.input_tokens),
+        func.sum(TaskStep.output_tokens),
+    ).join(Task, TaskStep.task_id == Task.id).join(User, Task.user_id == User.id).filter(Task.source != "development")
+    if start_date:
+        step_q = step_q.filter(func.date(Task.created_at) >= start_date[:10])
+    if end_date:
+        step_q = step_q.filter(func.date(Task.created_at) <= end_date[:10])
+    step_rows = step_q.group_by(user_label).all()
+    step_map = {r[0]: (r[1] or 0, r[2] or 0) for r in step_rows}
+
     return {
         "success": True,
         "data": [
-            {"name": r[0], "task_count": r[1], "total_tokens": r[2] or 0, "total_cost": float(r[3] or 0)}
+            {"name": r[0], "task_count": r[1],
+             "input_tokens": step_map.get(r[0], (0, 0))[0],
+             "output_tokens": step_map.get(r[0], (0, 0))[1],
+             "total_tokens": r[2] or 0, "total_cost": float(r[3] or 0)}
             for r in rows
         ],
     }

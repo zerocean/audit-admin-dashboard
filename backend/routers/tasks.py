@@ -122,15 +122,23 @@ def get_task(
     _= Depends(get_current_user),
 ):
     """任务详情 (含 steps + files)"""
+    from shared_db.models import User
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+
+    user_name = None
+    if task.user_id:
+        u = db.query(User).filter(User.id == task.user_id).first()
+        if u:
+            user_name = u.username
 
     return {
         "success": True,
         "data": {
             "id": task.id,
             "user_id": task.user_id,
+            "user_name": user_name,
             "project_name": task.project_name,
             "tool_type": task.tool_type,
             "source": task.source,
