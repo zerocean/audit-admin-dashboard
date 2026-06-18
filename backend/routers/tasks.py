@@ -210,6 +210,47 @@ def download_audit_report(task_id: int, db: Session = Depends(get_db), _=Depends
     def esc(s):
         return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     
+    def markdown_table_to_html(md):
+        """解析 markdown 表格为 HTML，正确处理单元格内换行"""
+        if not md:
+            return '<p>暂无复核结果</p>'
+        lines = md.split('\n')
+        merged = []
+        for line in lines:
+            t = line.strip()
+            if not t:
+                continue
+            if t.startswith('|'):
+                merged.append(t)
+            elif merged:
+                merged[-1] += ' ' + t
+        table_lines = [l for l in merged if l.count('|') >= 2]
+        if len(table_lines) < 2:
+            return '<pre>' + esc(md[:10000]) + '</pre>'
+        headers = [c.strip() for c in table_lines[0].split('|') if c.strip()]
+        if not headers:
+            return '<pre>' + esc(md[:10000]) + '</pre>'
+        h = '<table><thead><tr>'
+        for hdr in headers:
+            h += f'<th>{esc(hdr)}</th>'
+        h += '</tr></thead><tbody>'
+        for row_line in table_lines[2:]:  # skip header and separator
+            cells = [c.strip() for c in row_line.split('|') if c.strip()]
+            if not cells:
+                continue
+            h += '<tr>'
+            for i, cell in enumerate(cells):
+                tag = 'td'
+                if i == 1:  # Error Type column - colorize
+                    ct = cell.lower()
+                    if 'tie' in ct:
+                        h += f'<td style="background:rgba(79,142,247,.15);color:#3b82f6;font-weight:600">{esc(cell)}</td>'
+                        continue
+                h += f'<{tag}>{esc(cell)}</{tag}>'
+            h += '</tr>'
+        h += '</tbody></table>'
+        return h
+    
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     
     html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -236,8 +277,7 @@ th{{background:#f2f2f2}}pre{{background:#f8f8f8;padding:8pt;font-size:9pt;white-
     html += '<h2>二、数值复核结果</h2>'
     
     if audit_table:
-        # audit_table is HTML already
-        html += audit_table
+        html += markdown_table_to_html(audit_table)
     elif audit_text:
         html += '<pre>' + esc(audit_text[:50000]) + '</pre>'
     else:

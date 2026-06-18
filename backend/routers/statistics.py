@@ -4,7 +4,7 @@
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from database import get_db
 from shared_db.models import Task, TaskStep
 from auth import get_current_user
@@ -247,7 +247,7 @@ def error_rate(start_date: str = None, end_date: str = None,
     # 按用户
     by_user_rows = db.query(
         User.username, func.count(Task.id),
-        func.sum(func.iif(Task.status == "failed", 1, 0))
+        func.sum(case((Task.status == "failed", 1), else_=0))
     ).join(Task, Task.user_id == User.id).group_by(User.username)
     if start_date: by_user_rows = by_user_rows.filter(func.date(Task.created_at) >= start_date[:10])
     if end_date: by_user_rows = by_user_rows.filter(func.date(Task.created_at) <= end_date[:10])
@@ -258,7 +258,7 @@ def error_rate(start_date: str = None, end_date: str = None,
     # 按工具
     by_tool_rows = db.query(
         Task.tool_type, func.count(Task.id),
-        func.sum(func.iif(Task.status == "failed", 1, 0))
+        func.sum(case((Task.status == "failed", 1), else_=0))
     ).group_by(Task.tool_type)
     by_tool = [{"tool_type": r[0], "total": r[1], "failed": r[2] or 0,
                 "rate": round((r[2] or 0) / r[1] * 100, 2) if r[1] > 0 else 0}
