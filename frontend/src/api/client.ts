@@ -8,6 +8,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (token) headers['Authorization'] = `Bearer ${token}`
   if (!(options?.body instanceof FormData)) headers['Content-Type'] = 'application/json'
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  if (res.status === 401) {
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_username')
+    window.location.href = '/login'
+    throw new Error('登录已过期，请重新登录')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || err.error || `HTTP ${res.status}`)
