@@ -181,7 +181,7 @@ def get_task(
 
 @router.get("/{task_id}/files/{file_id}")
 def download_task_file(task_id: int, file_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """下载任务关联文件 (OSS 或本地)"""
+    """下载任务关联文件 (OSS 代理下载 或 本地)"""
     from shared_db.models import TaskFile
     import os as _os
     tf = db.query(TaskFile).filter(TaskFile.id == file_id, TaskFile.task_id == task_id).first()
@@ -189,20 +189,25 @@ def download_task_file(task_id: int, file_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="文件不存在")
 
     path = tf.oss_url or ""
-    # OSS: redirect to presigned URL
+    # OSS: proxy download (avoids CORS)
     if path.startswith("oss://"):
         try:
             import oss2
-            oss_endpoint = _os.getenv("OSS_ENDPOINT", "oss-cn-shenzhen.aliyuncs.com")
-            oss_bucket = _os.getenv("OSS_BUCKET", "audit-ha-bucket")
-            oss_key = path.replace(f"oss://{oss_bucket}/", "")
+            # Parse oss://bucket/key
+            no_prefix = path[6:]  # strip "oss://"
+            oss_bucket_name, oss_key = no_prefix.split("/", 1)
             auth = oss2.Auth(_os.getenv("OSS_ACCESS_KEY_ID", ""), _os.getenv("OSS_ACCESS_KEY_SECRET", ""))
-            bucket = oss2.Bucket(auth, oss_endpoint, oss_bucket)
-            url = bucket.sign_url('GET', oss_key, 3600)
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url=url)
+            bucket = oss2.Bucket(auth, _os.getenv("OSS_ENDPOINT", "oss-cn-shenzhen.aliyuncs.com"), oss_bucket_name)
+            obj = bucket.get_object(oss_key)
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(
+                iter(lambda: obj.read(65536), b''),
+                media_type=obj.headers.get('Content-Type', 'application/octet-stream'),
+                headers={'Content-Disposition': f'attachment; filename="{tf.file_name}"'}
+            )
         except Exception as e:
-            print(f"[OSS] Presign failed: {e}")
+            print(f"[OSS] Download failed: {e}")
+            raise HTTPException(status_code=404, detail=f"文件下载失败: {e}")
     # Local file
     if path and _os.path.exists(path):
         from fastapi.responses import FileResponse
