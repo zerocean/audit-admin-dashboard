@@ -6,3 +6,4 @@ passlib[bcrypt]
 python-dotenv
 python-multipart
 psycopg2-binary
+oss2

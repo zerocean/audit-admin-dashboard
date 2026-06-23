@@ -157,7 +157,7 @@ CREATE TABLE tasks (
 ### 6.1 审计任务
 
 - 元信息：文件名（从 TaskFile 读）、状态、Token、费用、时间
-- 执行步骤：vision_parser → audit_llm → inspector（含模型名和分步 Token）
+- 执行步骤：vision_parser → audit_llm 与 inspector 并行（含模型名和分步 Token/费用）
 - 输入文件：原始 PDF，点击下载
 - 输出文件：分析报告（Word 格式，含语法检查/数值复核/完整输出/解析结果四段）
 

@@ -181,17 +181,33 @@ def get_task(
 
 @router.get("/{task_id}/files/{file_id}")
 def download_task_file(task_id: int, file_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """下载任务关联文件"""
+    """下载任务关联文件 (OSS 或本地)"""
     from shared_db.models import TaskFile
     import os as _os
     tf = db.query(TaskFile).filter(TaskFile.id == file_id, TaskFile.task_id == task_id).first()
     if not tf:
         raise HTTPException(status_code=404, detail="文件不存在")
-    path = tf.oss_url
-    if not path or not _os.path.exists(path):
-        raise HTTPException(status_code=404, detail="文件已丢失")
-    from fastapi.responses import FileResponse
-    return FileResponse(path, filename=tf.file_name)
+
+    path = tf.oss_url or ""
+    # OSS: redirect to presigned URL
+    if path.startswith("oss://"):
+        try:
+            import oss2
+            oss_endpoint = _os.getenv("OSS_ENDPOINT", "oss-cn-shenzhen.aliyuncs.com")
+            oss_bucket = _os.getenv("OSS_BUCKET", "audit-ha-bucket")
+            oss_key = path.replace(f"oss://{oss_bucket}/", "")
+            auth = oss2.Auth(_os.getenv("OSS_ACCESS_KEY_ID", ""), _os.getenv("OSS_ACCESS_KEY_SECRET", ""))
+            bucket = oss2.Bucket(auth, oss_endpoint, oss_bucket)
+            url = bucket.sign_url('GET', oss_key, 3600)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=url)
+        except Exception as e:
+            print(f"[OSS] Presign failed: {e}")
+    # Local file
+    if path and _os.path.exists(path):
+        from fastapi.responses import FileResponse
+        return FileResponse(path, filename=tf.file_name)
+    raise HTTPException(status_code=404, detail="文件已丢失")
 
 
 @router.get("/{task_id}/report")
